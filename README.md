@@ -3,6 +3,8 @@ Code and Documentation produced by the Virtual Memory subbroup
 
 ## Manifest
 
+| File        | Description                                                          |
+|-------------| -------------------------------------------------------------------- |
 | vpmap.c     | New program to map ranges of virtual addresses to physical locations |
 | ref_code1.c | Reference implementation on converting memory to physical addresses  |
 | ref_code2.c | Reference implementation on converting memory to physical addresses  |
