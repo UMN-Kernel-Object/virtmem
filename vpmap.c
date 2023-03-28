@@ -1,6 +1,7 @@
 // vpmap.c: initial checkin
 
 #include <stdio.h>
+#include <stdint.h>
 
 // The following two structs use bitfields to enable easier parsing of
 // the data provided in /proc/<pid>/maps that will be a 64-bit number
