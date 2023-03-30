@@ -27,7 +27,8 @@ typedef struct {
   uint32_t minor_id;        // 08:30 for the device that holds the root filesystem, 00:00 for non-file mappings.
   uint64_t inode_id;        // ID of a struct containing some filesystem metadata.
   char *path;               // The path to the file, or something like [heap] or [stack]
-                            //   Must be freed
+                            //   Must be freed at the moment, could probably be replaced by a
+                            //   fixed length array.
 } maps_entry_t;
 
 // map entry which is present in memory (not swapped out)
@@ -93,7 +94,7 @@ void proc_open(char *pid, int *maps_fd, int *pm_fd)
 }
 
 /**
- * @brief Reads one entry of pagemap.
+ * @brief Reads one entry of pagemap. Exits if a read fails.
  * @param pm_fd The file descriptor for the pagemap.
  * @param buf The buffer to be written to.
  * @param vaddr The virtual address to be read from the pagemap.
@@ -102,8 +103,10 @@ void pmread(int pm_fd, pm_entry_t *buf, uint64_t vaddr)
 {
   long bytes = pread(pm_fd, buf, 8, (off_t)(vaddr / PAGE_SIZE * 8));
   
-  if (bytes < 0)
+  if (bytes < 0) {
+    fprintf(stderr, "Failed read from pagemap");
     exit(EXIT_FAILURE);
+  }
 }
 
 /**
@@ -119,6 +122,7 @@ void print_phys_addr(const pm_entry_t *entry)
     return;
   }
 
+  // TODO: Handle further description for non-present pages.
   if (entry->present.swapped) {
     printf(" | ENTRY: %016lx | SWAPPED\n", *(uint64_t *)entry);
     return;
@@ -138,7 +142,9 @@ void maps_parseln(maps_entry_t *entry, FILE **maps)
   // Assumes that an entry is less than 512 bytes long, this could be fixed.
   char buff[512];
   char pathbuff[512];
+
   fgets(buff, 512, *maps);
+  // Some lines of maps don't have a path at the end, this if handles that. 
   if (strlen(buff) < 73) {
     sscanf(buff, "%lx-%lx %s %lx %x:%x %lx",
       &entry->start_addr, &entry->end_addr, entry->mode, &entry->offset,
@@ -171,21 +177,30 @@ void maps_parse(int maps_fd, int pm_fd)
 
   maps_parseln(&maps_entry, &maps);
   while (!feof(maps)) {
+    // Print one entry of maps
     sprintf(maps_buff, "%lx-%lx %s %08lx %02x:%02x %lx %s",
       maps_entry.start_addr, maps_entry.end_addr, maps_entry.mode,
       maps_entry.offset, maps_entry.major_id, maps_entry.minor_id,
       maps_entry.inode_id, maps_entry.path);
     printf("%-115s", maps_buff);
 
+    // Read the starting virtual address from that maps entry, and search
+    // for it in pagemap.
     pmread(pm_fd, &pm_entry, maps_entry.start_addr);
     print_phys_addr(&pm_entry);
 
+    // Parse the next entry
     free(maps_entry.path);
     maps_parseln(&maps_entry, &maps);
   }
 };
 
 int main(int argc, char *argv[]){
+  if (argc != 2) {
+    puts("Usage: sudo ./vpmap.out <pid>\n");
+    return 0;
+  }
+
   int maps_fd, pm_fd;
   proc_open(argv[1], &maps_fd, &pm_fd);
   maps_parse(maps_fd, pm_fd);
